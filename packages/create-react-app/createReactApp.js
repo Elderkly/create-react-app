@@ -232,6 +232,14 @@ function init() {
     });
 }
 
+/**
+ *  name: 创建的 React 应用的名称，即项目目录的名称。
+    verbose: 一个布尔值，表示是否输出详细的日志信息。
+    version: 可选参数，用于指定要使用的 react-scripts 的版本。可以是一个特定的版本号，也可以是一个自定义的 npm 包名称、本地路径或者远程存档的 URL。
+    template: 可选参数，用于指定创建项目时要使用的模板。可以是一个已发布在 npm 上的自定义模板包名称，也可以是本地路径或远程存档的 URL。
+    useYarn: 一个布尔值，表示是否使用 Yarn 作为包管理器。如果为 true，则使用 Yarn；如果为 false，则使用 npm。
+    usePnp: 一个布尔值，表示是否启用 Yarn 的 Plug'n'Play（PnP）特性。只有在使用 Yarn 且安装的 Yarn 版本为 1.12 或更高版本时才可用。
+*/
 function createApp(name, verbose, version, template, useYarn, usePnp) {
   const unsupportedNodeVersion = !semver.satisfies(
     // Coerce strings with metadata (i.e. `15.0.0-nightly`).
@@ -254,7 +262,9 @@ function createApp(name, verbose, version, template, useYarn, usePnp) {
   const appName = path.basename(root);
 
   checkAppName(appName);
+  //  目录不存在就创建目录
   fs.ensureDirSync(name);
+  //  目录内是否含有非法名称的文件
   if (!isSafeToCreateProjectIn(root, name)) {
     process.exit(1);
   }
@@ -268,8 +278,10 @@ function createApp(name, verbose, version, template, useYarn, usePnp) {
     version: '0.1.0',
     private: true,
   };
+  //  写入package.json
   fs.writeFileSync(
     path.join(root, 'package.json'),
+    //  JSON.stringify(内容, 替换函数，空格缩进) + 换行符
     JSON.stringify(packageJson, null, 2) + os.EOL
   );
 
@@ -380,6 +392,7 @@ function install(root, useYarn, usePnp, dependencies, verbose, isOnline) {
       args.push('--verbose');
     }
 
+    //  执行npm install
     const child = spawn(command, args, { stdio: 'inherit' });
     child.on('close', code => {
       if (code !== 0) {
@@ -393,6 +406,17 @@ function install(root, useYarn, usePnp, dependencies, verbose, isOnline) {
   });
 }
 
+/**
+ * root: 创建的 React 应用的根目录路径。
+appName: 创建的 React 应用的名称。
+version: 可选参数，用于指定要使用的 react-scripts 的版本。可以是一个特定的版本号，也可以是一个自定义的 npm 包名称、本地路径或者远程存档的 URL。
+verbose: 一个布尔值，表示是否输出详细的日志信息。
+originalDirectory: 创建应用之前的工作目录路径。
+template: 可选参数，用于指定创建项目时要使用的模板。可以是一个已发布在 npm 上的自定义模板包名称，也可以是本地路径或远程存档的 URL。
+useYarn: 一个布尔值，表示是否使用 Yarn 作为包管理器。如果为 true，则使用 Yarn；如果为 false，则使用 npm。
+usePnp: 一个布尔值，表示是否启用 Yarn 的 Plug'n'Play（PnP）特性。只有在使用 Yarn 且安装的 Yarn 版本为 1.12 或更高版本时才可用。
+ * 
+*/
 function run(
   root,
   appName,
@@ -404,13 +428,16 @@ function run(
   usePnp
 ) {
   Promise.all([
+    //  确定react-scripts的版本
     getInstallPackage(version, originalDirectory),
+    //  确定template的版本 默认template为 cra-template
     getTemplateInstallPackage(template, originalDirectory),
   ]).then(([packageToInstall, templateToInstall]) => {
     const allDependencies = ['react', 'react-dom', packageToInstall];
 
     console.log('Installing packages. This might take a couple of minutes.');
 
+    //  接下来的操作主要判断template需要的版本 本地环境是否支持
     Promise.all([
       getPackageInfo(packageToInstall),
       getPackageInfo(templateToInstall),
@@ -481,6 +508,33 @@ function run(
 
         const nodeArgs = fs.existsSync(pnpPath) ? ['--require', pnpPath] : [];
 
+        /**
+         * 作用：
+         *    执行node代码
+         *    将创建项目的进程传到react-script 后续更新维护react-script即可
+         *    此时createReactApp.js任务已完成(接受指令 创建目录 package.json 确定模板 确定react-script和template的版本 安装依赖)
+         * 
+         * 解析：
+         *    在传入的代码段中(即被执行代码) JSON.parse(process.argv[1])实际取得是JSON.parse(process.argv[2])
+         *    process.argv[1]指向'-e' process.argv[2]指向'-e'后面的参数
+         *    对于被执行脚本内部还是访问到的[1]还是"-e",但spawn会自动取到实参argv[2]
+         *    所以直接将被执行脚本的process.argv[1]改为process.argv[2]效果是一样的
+         * 
+         * 例子参数:
+              root: '/path/to/project'
+              appName: 'my-app'
+              verbose: true
+              originalDirectory: '/'
+              templateName: null
+              packageName: 'react-scripts'
+              nodeArgs: ['--require', '.pnp.js']
+
+           执行脚本：
+              node --require .pnp.js -e '
+                const init = require("react-scripts/scripts/init.js"); 
+                init.apply(null, JSON.parse(["/path/to/project","my-app",true,"/","null"]));
+              '
+        */
         await executeNodeScript(
           {
             cwd: process.cwd(),
@@ -892,6 +946,10 @@ function setCaretRangeForRuntimeDeps(packageName) {
     process.exit(1);
   }
 
+  /**
+   * 设置react和react-dom依赖包为caret range版本
+   * 即可以自动匹配最新补丁版本 例如：1.2.1 匹配1.2.4 不匹配1.3.1、2.0.0
+  */
   makeCaretRange(packageJson.dependencies, 'react');
   makeCaretRange(packageJson.dependencies, 'react-dom');
 
