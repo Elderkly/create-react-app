@@ -1,4 +1,17 @@
 /**
+ *  createReactApp.js
+ *  功能：
+      1.解析用户的命令行参数和选项。
+      2.检查当前 Node.js 版本是否符合要求。
+      3.创建新的 React 应用的目录。
+      4.检查应用名称是否合法。
+      5.生成 package.json 文件，并安装 react-scripts 包。
+      6.根据用户指定的模板安装相应模板库
+      7.将任务转交给 react-scripts 处理后续操作。
+ * 
+*/
+
+/**
  * Copyright (c) 2015-present, Facebook, Inc.
  *
  * This source code is licensed under the MIT license found in the
@@ -517,7 +530,7 @@ function run(
          * 解析：
          *    在传入的代码段中(即被执行代码) JSON.parse(process.argv[1])实际取得是JSON.parse(process.argv[2])
          *    process.argv[1]指向'-e' process.argv[2]指向'-e'后面的参数
-         *    对于被执行脚本内部还是访问到的[1]还是"-e",但spawn会自动取到实参argv[2]
+         *    对于被执行脚本内部访问到的[1]还是"-e",但spawn会自动取到实参argv[2]
          *    所以直接将被执行脚本的process.argv[1]改为process.argv[2]效果是一样的
          * 
          * 例子参数:
@@ -744,6 +757,7 @@ function getPackageInfo(installPackage) {
         } else {
           stream = fs.createReadStream(installPackage);
         }
+        //  解压压缩包 可能是模板文件
         return extractStream(stream, obj.tmpdir).then(() => obj);
       })
       .then(obj => {

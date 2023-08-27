@@ -1,3 +1,16 @@
+/**
+ * react-script init.js
+ * 作用：
+    1.解析模板文件(template.json)相关的配置信息(模板包在createReactApp.js中安装)
+    2.根据模板配置设置项目的包依赖(package.json中的dependencies)
+    3.根据模板添加或修改项目的脚本命令(package.json中的scripts)
+    4.处理其他模板引入的项目设置,比如eslint配置等
+    5.执行模板文件内容的复制,实现模板在项目中的渲染
+    6.根据模板需要安装其定义的依赖包
+    7.初始化git仓库(可选)
+    8.引导依赖和脚本的安装运行流程
+    9.完成模板使用任务后,删除模板相关包文件
+*/
 // @remove-file-on-eject
 /**
  * Copyright (c) 2015-present, Facebook, Inc.
@@ -81,6 +94,13 @@ function tryGitCommit(appPath) {
   }
 }
 
+/**
+ * appPath:项目创建的目录路径
+  appName:项目名称
+  verbose:是否开启详细日志输出,布尔值
+  originalDirectory:原本命令行操作的工作目录路径
+  templateName:指定使用的模板名称
+*/
 module.exports = function (
   appPath,
   appName,
@@ -113,12 +133,30 @@ module.exports = function (
     return;
   }
 
+  //  template已在createReactApp中通过yarn/npm进行安装
   const templatePath = path.dirname(
     require.resolve(`${templateName}/package.json`, { paths: [appPath] })
   );
 
   const templateJsonPath = path.join(templatePath, 'template.json');
 
+  /**
+   * 取到模板的依赖项 和一些配置项
+   * 例如： cra模板
+   * {
+      "package": {
+        "dependencies": {
+          "@testing-library/jest-dom": "^5.14.1",
+          "@testing-library/react": "^13.0.0",
+          "@testing-library/user-event": "^13.2.1",
+          "web-vitals": "^2.1.0"
+        },
+        "eslintConfig": {
+          "extends": ["react-app", "react-app/jest"]
+        }
+      }
+    }
+  */
   let templateJson = {};
   if (fs.existsSync(templateJsonPath)) {
     templateJson = require(templateJsonPath);
@@ -138,6 +176,7 @@ module.exports = function (
     console.log('For more information, visit https://cra.link/templates');
   }
 
+  //  忽略
   // Keys to ignore in templatePackage
   const templatePackageBlacklist = [
     'name',
@@ -165,9 +204,11 @@ module.exports = function (
     'publishConfig',
   ];
 
+  //  合并
   // Keys from templatePackage that will be merged with appPackage
   const templatePackageToMerge = ['dependencies', 'scripts'];
 
+  //  上述两种情况都没有的key将直接使用template配置文件替换
   // Keys from templatePackage that will be added to appPackage,
   // replacing any existing entries.
   const templatePackageToReplace = Object.keys(templatePackage).filter(key => {
@@ -180,6 +221,7 @@ module.exports = function (
   // Copy over some of the devDependencies
   appPackage.dependencies = appPackage.dependencies || {};
 
+  //  设置scripts 也就是通过命令调用的webpack脚本 是调用的react-scripts内置的脚本
   // Setup the script rules
   const templateScripts = templatePackage.scripts || {};
   appPackage.scripts = Object.assign(
@@ -192,6 +234,7 @@ module.exports = function (
     templateScripts
   );
 
+  //  如果使用yarn 将scripts里面的npm run | npm 替换为yarn
   // Update scripts for Yarn users
   if (useYarn) {
     appPackage.scripts = Object.entries(appPackage.scripts).reduce(
@@ -216,6 +259,7 @@ module.exports = function (
     appPackage[key] = templatePackage[key];
   });
 
+  //  处理完毕package.json 写入
   fs.writeFileSync(
     path.join(appPath, 'package.json'),
     JSON.stringify(appPackage, null, 2) + os.EOL
@@ -229,6 +273,7 @@ module.exports = function (
     );
   }
 
+  //  每一个cra模板都有一个template文件 用于存储默认目录文件
   // Copy the files for the user
   const templateDir = path.join(templatePath, 'template');
   if (fs.existsSync(templateDir)) {
@@ -254,6 +299,7 @@ module.exports = function (
     }
   }
 
+  //  将gitignore文件内容写入到.gitignore
   const gitignoreExists = fs.existsSync(path.join(appPath, '.gitignore'));
   if (gitignoreExists) {
     // Append if there's already a `.gitignore` file there
@@ -279,6 +325,7 @@ module.exports = function (
     console.log('Initialized a git repository.');
   }
 
+  //  下面的内容主要处理依赖项的安装
   let command;
   let remove;
   let args;
@@ -322,6 +369,7 @@ module.exports = function (
     console.log();
     console.log(`Installing template dependencies using ${command}...`);
 
+    //  执行安装命令
     const proc = spawn.sync(command, args, { stdio: 'inherit' });
     if (proc.status !== 0) {
       console.error(`\`${command} ${args.join(' ')}\` failed`);
@@ -334,6 +382,7 @@ module.exports = function (
     verifyTypeScriptSetup();
   }
 
+  //  此时模板已安装完毕 将模板包从依赖中删除
   // Remove template
   console.log(`Removing template package using ${command}...`);
   console.log();
@@ -346,6 +395,7 @@ module.exports = function (
     return;
   }
 
+  //  自动commit一次初始化提交
   // Create git commit if git repo was initialized
   if (initializedGit && tryGitCommit(appPath)) {
     console.log();
